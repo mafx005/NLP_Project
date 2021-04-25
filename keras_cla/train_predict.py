@@ -1,0 +1,204 @@
+# -*- coding: utf-8 -*-
+# @Time : 2020/11/30 15:45
+# @Author : M
+# @FileName: train_predict.py
+# @Dec : 
+
+import os
+import pickle
+import numpy as np
+import random as rn
+import tensorflow as tf
+import keras
+import gensim
+from gensim.models import Word2Vec
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
+from keras.utils import plot_model
+from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_score, confusion_matrix, \
+    classification_report
+
+from config import Config
+from utils import load_data, load_vocab
+from classification_model import BiGRU, TextCNN
+from My_Callback import Mylosscallback
+import csv
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+config = Config()
+
+np.random.seed(42)
+rn.seed(666)
+tf.set_random_seed(2020)
+
+os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu_id
+gpu_options = tf.GPUOptions(allow_growth=True)
+sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+
+
+if config.do_train:
+    try:
+        os.remove(config.epoch_info_path)
+    except:
+        pass
+
+
+train_text, train_label = load_data(config.train_path, config.cla_type, config.cla_nums, config.word_char)
+valid_text, valid_label = load_data(config.valid_path, config.cla_type, config.cla_nums, config.word_char)
+test_text, test_label = load_data(config.test_path, config.cla_type, config.cla_nums, config.word_char)
+total_text = train_text + valid_text + test_text
+print(len(total_text))
+# print(train_label.min(), train_label.max())
+train_text = train_text[:5000]
+valid_text = valid_text[:500]
+test_text = test_text[:50]
+train_label = train_label[:5000]
+valid_label = valid_label[:500]
+test_label = test_label[:50]
+
+
+if config.word_char == 'word':
+    token = load_vocab(config.word_vocab_path, total_text, word_char='word', num_words=config.word_num_words)
+else:
+    token = load_vocab(config.char_vocab_path, total_text, word_char='char', num_words=config.char_num_words)
+
+if config.do_train:
+    train = token.texts_to_sequences(train_text)
+    valid = token.texts_to_sequences(valid_text)
+    if config.word_char == 'word':
+        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.word_maxlen)
+        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.word_maxlen)
+    else:
+        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.char_maxlen)
+        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.char_maxlen)
+
+if config.do_predict:
+    test = token.texts_to_sequences(test_text)
+    if config.word_char == 'word':
+        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.word_maxlen)
+    else:
+        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.char_maxlen)
+
+if config.word_char == 'word':
+    word_vocab = token.word_index
+    if not os.path.exists(config.w2v_path):
+        print("++++++++++train word2vec model finished++++++++++")
+        model = Word2Vec([[word for word in document.split(' ')] for document in total_text],
+                         size=300,
+                         window=5,
+                         iter=10,
+                         seed=2020,
+                         min_count=2)
+        model.save(config.w2v_path)
+        w2v_model = Word2Vec.load(config.w2v_path)
+        print("++++++++++train word2vec model finished++++++++++")
+    else:
+        w2v_model = Word2Vec.load(config.w2v_path)
+        # glove_model = gensim.models.KeyedVectors.load_word2vec_format(config.glove_path)
+        print("++++++++++load word2vec glove finished++++++++++")
+
+    w2v_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
+    for word, i in word_vocab.items():
+        embedding_vector = w2v_model.wv[word] if word in w2v_model else None
+        if embedding_vector is not None:
+            w2v_embedding_matrix[i] = embedding_vector
+        else:
+            unk_vec = np.random.random(300) * 0.5
+            unk_vec = unk_vec - unk_vec.mean()
+            w2v_embedding_matrix[i] = unk_vec
+    # glove_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
+    # for word, i in word_vocab.items():
+    #     embedding_vector = glove_model.wv[word] if word in glove_model else None
+    #     if embedding_vector is not None:
+    #         glove_embedding_matrix[i] = embedding_vector
+    #     else:
+    #         unk_vec = np.random.random(300) * 0.5
+    #         unk_vec = unk_vec - unk_vec.mean()
+    #         glove_embedding_matrix[i] = unk_vec
+    if config.embedding_type == 'glove':
+        # embedding_matrix = glove_embedding_matrix
+        print('glove embedding load finish')
+    elif config.embedding_type == 'w2v_glove':
+        # embedding_matrix = np.concatenate((w2v_embedding_matrix, glove_embedding_matrix),axis=1)
+        embedding_matrix = w2v_embedding_matrix
+        print('w2v & glove embedding load finish')
+    else:
+        embedding_matrix = w2v_embedding_matrix
+        print('word2vec embedding load finish')
+    model = config.model(config.word_maxlen, embedding_matrix, config.word_char)
+else:
+    model = config.model(config.char_maxlen, None, config.word_char)
+
+if config.do_train:
+    print('++++++++++Training++++++++++')
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5)
+    plateau = ReduceLROnPlateau(monitor="val_loss", verbose=1, mode='max', factor=0.5, patience=3)
+    checkpoint_prefix = os.path.join(config.checkpoint_dir, "best.weight")
+    checkpoint = ModelCheckpoint(checkpoint_prefix, monitor='val_loss', verbose=2,
+                                 save_best_only=True, mode='max', save_weights_only=True)
+    if config.cla_type == 'Multiclass':
+        print('Multiclass training')
+        model.compile(loss="categorical_crossentropy", optimizer='adam', metrics=['accuracy'])
+    if config.cla_type == 'Binary_class':
+        print('Binary_class training')
+        model.compile(loss="binary_crossentropy", optimizer='adam', metrics=['accuracy'])
+    model.fit(train, train_label, batch_size=config.batch_size, epochs=config.epoch,
+              validation_data=(valid, valid_label),
+              callbacks=[early_stopping, plateau, checkpoint, Mylosscallback(log_dir='log')],
+              verbose=1, shuffle=False)
+    model.summary()
+    # plot_model(model, to_file=os.path.join(config.checkpoint_dir, 'model.png'), show_shapes=True)
+
+if config.do_predict:
+    print('++++++++++Predicting++++++++++')
+
+    model.load_weights(os.path.join(config.checkpoint_dir,'best.weight'))
+    print('Model_load_path:', os.path.join(config.checkpoint_dir,'best.weight'))
+    if config.cla_type == 'Multiclass':
+        test_pred = model.predict(test)
+        pred_labels = np.argmax(test_pred, axis=1)
+        # pred_labels = list(map(str, pred_labels))
+        test_label = np.argmax(test_label, axis=1)
+    if config.cla_type == 'Binary_class':
+        test_pred = model.predict(test)
+        pred_labels = np.where(test_pred > 0.8, 1, 0)
+    test_acc = accuracy_score(test_label, pred_labels)
+    test_f1 = f1_score(test_label, pred_labels, average='macro')
+    test_recall = recall_score(test_label, pred_labels, average='macro')
+    test_precision = precision_score(test_label, pred_labels, average='macro')
+    
+    print('ACC:{}'.format(test_acc)) 
+    print('F1:{}'.format(test_f1))
+    print('recall:{}'.format(test_recall))
+    print('precision:{}'.format(test_precision))
+    print(confusion_matrix(test_label, pred_labels))
+    print(classification_report(test_label, pred_labels))
+    
+    # 写入最终结果
+    if config.write2txt:
+        print('++++++++++Write Result ++++++++++')
+        with open(config.result_info_path,'w',encoding='utf8')as f:
+            f.write('ACC:' + '\t' + str(test_acc) + '\n')
+            f.write('F1:' + '\t' + str(test_f1) + '\n')
+            f.write('recall:' + '\t' + str(test_recall) + '\n')
+            f.write('precision:' + '\t' + str(test_precision) + '\n')
+        f.close()
+    
+    
+    
+    
+    #bad case输出
+    if config.write_badcase:
+        print('badcase写入中')
+        pred_labels_list = pred_labels.tolist()
+        true_labels_list = test_label.tolist()
+        bad_case_file = open(config.badcase_path,'w',encoding='utf8',newline="")
+        csv_writer = csv.writer(bad_case_file)
+        csv_writer.writerow(['fact','true_label','pred_label','pred_probability'])
+        test_file = open(config.test_path,'r',encoding='utf8')
+        test_lines = test_file.readlines()
+        # print(test_lines[0])
+        for i in range(len(pred_labels_list)):
+            if pred_labels_list[i][0] != true_labels_list[i]:
+                # print(i)
+                csv_writer.writerow([test_lines[i].split('\t')[1],test_lines[i].split('\t')[0],pred_labels_list[i][0], test_pred.tolist()[i][0]])
+        bad_case_file.close()
