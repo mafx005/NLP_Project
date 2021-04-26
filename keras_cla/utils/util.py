@@ -90,6 +90,11 @@ def load_data(file_path, cla_type, cla_nums, word_char='word'):
     text = []
     label = []
     for t in file_name:
+        try:
+            assert len(t.split('\t')) == 2
+        except:
+            print('data error line is ', t)
+            continue
         if word_char == 'word':
             text.append(cut_data(t.split('\t')[1]))
         else:
