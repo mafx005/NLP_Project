@@ -5,11 +5,12 @@
 # @Dec :
 
 import os
-from model_zoo.bigru import BiGRU
-from model_zoo.dpcnn import DPCNN
-from model_zoo.rnn_att import AttRNN
-from model_zoo.textcnn import TextCNN
-from model_zoo.han import HAN
+from model_zoo.BIGRU import BiGRUModel
+from model_zoo.DPCNN import DPCNNModel
+from model_zoo.RNN_Att import AttRNNModel
+from model_zoo.TextCNN import TextCNNModel
+from model_zoo.HAN import HANModel
+from model_zoo.LEAM import LEAMModel
 
 
 class Config(object):
@@ -28,7 +29,7 @@ class Config(object):
         self.class_file = os.path.join(self.base_file, r'data\class.txt')
         self.cla_nums = len([x.strip() for x in open(self.class_file, encoding='utf8').readlines()])  # 分类标签数目
 
-        self.model = HAN  # 模型
+        self.model = LEAMModel  # 模型[BiGRUModel,DPCNNModel,AttRNNModel,TextCNNModel,HANModel,LEAMModel]
         self.word_char = 'word'  # word or char
 
         self.checkpoint_dir = os.path.join(self.base_file, 'save_model')  # 需要修改文件名

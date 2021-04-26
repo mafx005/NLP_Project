@@ -159,7 +159,6 @@ if config.do_predict:
         pred_labels = predict2both(test_pred)
         pred_labels_tag = predict2tag(pred_labels, config.class_file)
         test_labels_tag = predict2tag(test_label, config.class_file)
-        print(pred_labels)
         tmp = [(test_label[i] == pred_labels[i]).min() for i in range(len(pred_labels))]
         test_accu = sum(tmp) / len(tmp)
         f1_micro = f1_score(y_pred=pred_labels, y_true=test_label, pos_label=1, average='micro')

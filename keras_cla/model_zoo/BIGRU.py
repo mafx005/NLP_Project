@@ -10,7 +10,7 @@ from keras.layers import SpatialDropout1D, Dense, Input
 from keras.models import Model
 
 
-def BiGRU(sent_length, embeddings_weight, word_char):
+def BiGRUModel(sent_length, embeddings_weight, word_char):
     content = Input(shape=(sent_length,), dtype='int32')
     from Config.config import Config
     config = Config()

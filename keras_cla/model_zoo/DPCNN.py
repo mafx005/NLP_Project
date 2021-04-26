@@ -18,7 +18,7 @@ bias_reg = l2(0.00001)
 kernel_reg = l2(0.00001)
 
 
-def DPCNN(sent_length, embeddings_weight, word_char):
+def DPCNNModel(sent_length, embeddings_weight, word_char):
     content = Input(shape=(sent_length,), dtype='int32')
     from Config.config import Config
     config = Config()

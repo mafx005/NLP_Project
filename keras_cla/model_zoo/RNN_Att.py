@@ -13,7 +13,7 @@ from keras.models import Model
 from layers.attention import AttentionWeightedAverage
 
 
-def AttRNN(sent_length, embeddings_weight, word_char):
+def AttRNNModel(sent_length, embeddings_weight, word_char):
     content = Input(shape=(sent_length,), dtype='int32')
     from Config.config import Config
     config = Config()

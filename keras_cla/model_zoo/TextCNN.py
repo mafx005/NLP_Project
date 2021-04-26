@@ -12,7 +12,7 @@ from keras.layers import Dense, Input
 from keras.models import Model
 
 
-def TextCNN(sent_length, embeddings_weight, word_char):
+def TextCNNModel(sent_length, embeddings_weight, word_char):
     content = Input(shape=(sent_length,), dtype='int32')
     from Config.config import Config
     config = Config()
