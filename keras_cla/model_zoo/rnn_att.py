@@ -44,6 +44,8 @@ def AttRNN(sent_length, embeddings_weight, word_char):
         output = Dense(1, activation="sigmoid")(x)
     elif config.cla_type == 'Multiclass':
         output = Dense(config.cla_nums, activation="softmax")(x)
+    elif config.cla_type == 'Mutillabel':
+        output = Dense(config.cla_nums, activation="sigmoid")(x)
     else:
         raise Exception('Assert cla_type in Multiclass or Binary_class or Mutillabel')
     model = Model(inputs=content, outputs=output)

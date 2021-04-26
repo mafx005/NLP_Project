@@ -11,13 +11,14 @@ import tensorflow as tf
 import keras
 from gensim.models import Word2Vec
 import gensim
+import csv
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_score
 from sklearn.metrics import confusion_matrix, classification_report
 from Config.config import Config
-from utils.util import load_data, load_vocab
 from callbacks.My_Callback import Mylosscallback
-import csv
+from utils.util import load_data, load_vocab, predict2both, predict2tag
+
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 config = Config()
@@ -36,40 +37,25 @@ if config.do_train:
     except:
         pass
 
-train_text, train_label = load_data(config.train_path, config.cla_type, config.cla_nums, config.word_char)
-valid_text, valid_label = load_data(config.valid_path, config.cla_type, config.cla_nums, config.word_char)
-test_text, test_label = load_data(config.test_path, config.cla_type, config.cla_nums, config.word_char)
+train_text, train_label = load_data(config.train_path, config.class_file, config.cla_type, config.cla_nums, config.word_char)
+valid_text, valid_label = load_data(config.valid_path, config.class_file, config.cla_type, config.cla_nums, config.word_char)
+test_text, test_label = load_data(config.test_path, config.class_file, config.cla_type, config.cla_nums, config.word_char)
 total_text = train_text + valid_text + test_text
 print(len(total_text))
 # print(train_label.min(), train_label.max())
-# train_text = train_text[:5000]
-# valid_text = valid_text[:500]
-# test_text = test_text[:50]
-# train_label = train_label[:5000]
-# valid_label = valid_label[:500]
-# test_label = test_label[:50]
+train_text = train_text[:500]
+valid_text = valid_text[:50]
+test_text = test_text[:5]
+print(test_text)
+train_label = train_label[:500]
+valid_label = valid_label[:50]
+test_label = test_label[:5]
+print(test_label)
 
 if config.word_char == 'word':
     token = load_vocab(config.word_vocab_path, total_text, word_char='word', num_words=config.word_num_words)
 else:
     token = load_vocab(config.char_vocab_path, total_text, word_char='char', num_words=config.char_num_words)
-
-if config.do_train:
-    train = token.texts_to_sequences(train_text)
-    valid = token.texts_to_sequences(valid_text)
-    if config.word_char == 'word':
-        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.word_maxlen)
-        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.word_maxlen)
-    else:
-        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.char_maxlen)
-        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.char_maxlen)
-
-if config.do_predict:
-    test = token.texts_to_sequences(test_text)
-    if config.word_char == 'word':
-        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.word_maxlen)
-    else:
-        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.char_maxlen)
 
 if config.word_char == 'word':
     word_vocab = token.word_index
@@ -124,6 +110,14 @@ else:
 
 if config.do_train:
     print('++++++++++Training++++++++++')
+    train = token.texts_to_sequences(train_text)
+    valid = token.texts_to_sequences(valid_text)
+    if config.word_char == 'word':
+        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.word_maxlen)
+        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.word_maxlen)
+    else:
+        train = keras.preprocessing.sequence.pad_sequences(train, maxlen=config.char_maxlen)
+        valid = keras.preprocessing.sequence.pad_sequences(valid, maxlen=config.char_maxlen)
     early_stopping = EarlyStopping(monitor='val_loss', patience=5)
     plateau = ReduceLROnPlateau(monitor="val_loss", verbose=1, mode='max', factor=0.5, patience=3)
     checkpoint_prefix = os.path.join(config.checkpoint_dir, "best.weight")
@@ -144,6 +138,11 @@ if config.do_train:
 
 if config.do_predict:
     print('++++++++++Predicting++++++++++')
+    test = token.texts_to_sequences(test_text)
+    if config.word_char == 'word':
+        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.word_maxlen)
+    else:
+        test = keras.preprocessing.sequence.pad_sequences(test, maxlen=config.char_maxlen)
 
     model.load_weights(os.path.join(config.checkpoint_dir, 'best.weight'))
     print('Model_load_path:', os.path.join(config.checkpoint_dir, 'best.weight'))
@@ -155,20 +154,40 @@ if config.do_predict:
     elif config.cla_type == 'Binary_class':
         test_pred = model.predict(test)
         pred_labels = np.where(test_pred > 0.8, 1, 0)
+    elif config.cla_type == 'Mutillabel':
+        test_pred = model.predict(test)
+        pred_labels = predict2both(test_pred)
+        pred_labels_tag = predict2tag(pred_labels, config.class_file)
+        test_labels_tag = predict2tag(test_label, config.class_file)
+        print(pred_labels)
+        tmp = [(test_label[i] == pred_labels[i]).min() for i in range(len(pred_labels))]
+        test_accu = sum(tmp) / len(tmp)
+        f1_micro = f1_score(y_pred=pred_labels, y_true=test_label, pos_label=1, average='micro')
+        f1_macro = f1_score(y_pred=pred_labels, y_true=test_label, pos_label=1, average='macro')
+        f1_avg = (f1_micro + f1_macro) / 2
     else:
         raise Exception('Assert cla_type in Multiclass or Binary_class or Mutillabel')
-    test_acc = accuracy_score(test_label, pred_labels)
-    test_f1 = f1_score(test_label, pred_labels, average='macro')
-    test_recall = recall_score(test_label, pred_labels, average='macro')
-    test_precision = precision_score(test_label, pred_labels, average='macro')
+    if config.cla_type in ['Multiclass', 'Binary_class']:
+        test_acc = accuracy_score(test_label, pred_labels)
+        test_f1 = f1_score(test_label, pred_labels, average='macro')
+        test_recall = recall_score(test_label, pred_labels, average='macro')
+        test_precision = precision_score(test_label, pred_labels, average='macro')
 
-    print('ACC:{}'.format(test_acc))
-    print('F1:{}'.format(test_f1))
-    print('recall:{}'.format(test_recall))
-    print('precision:{}'.format(test_precision))
-    print(confusion_matrix(test_label, pred_labels))
-    print(classification_report(test_label, pred_labels))
-
+        print('ACC:{}'.format(test_acc))
+        print('F1:{}'.format(test_f1))
+        print('recall:{}'.format(test_recall))
+        print('precision:{}'.format(test_precision))
+        print(confusion_matrix(test_label, pred_labels))
+        print(classification_report(test_label, pred_labels))
+    elif config.cla_type in ['Mutillabel']:
+        test_acc = test_accu
+        test_f1 = f1_avg
+        test_recall = ''
+        test_precision = ''
+        f1_macro = f1_macro
+        f1_micro = f1_micro
+    else:
+        raise Exception('Assert cla_type in Multiclass or Binary_class or Mutillabel')
     # 写入最终结果
     if config.write2txt:
         print('++++++++++Write Result ++++++++++')
@@ -190,8 +209,13 @@ if config.do_predict:
         test_file = open(config.test_path, 'r', encoding='utf8')
         test_lines = test_file.readlines()
         # print(test_lines[0])
-        for i in range(len(pred_labels_list)):
-            if pred_labels_list[i][0] != true_labels_list[i]:
-                # print(i)
-                csv_writer.writerow([test_lines[i].split('\t')[1], test_lines[i].split('\t')[0], pred_labels_list[i][0], test_pred.tolist()[i][0]])
+        if config.cla_type == 'Mutillabel':
+            for i in range(len(tmp)):
+                if not tmp[i]:
+                    csv_writer.writerow([test_lines[i].split('\t')[1], test_labels_tag[i], pred_labels_tag[i], ''])
+        else:
+            for i in range(len(pred_labels_list)):
+                if pred_labels_list[i][0] != true_labels_list[i]:
+                    # print(i)
+                    csv_writer.writerow([test_lines[i].split('\t')[1], test_lines[i].split('\t')[0], pred_labels_list[i][0], test_pred.tolist()[i][0]])
         bad_case_file.close()
