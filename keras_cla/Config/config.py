@@ -11,6 +11,7 @@ from model_zoo.RNN_Att import AttRNNModel
 from model_zoo.TextCNN import TextCNNModel
 from model_zoo.HAN import HANModel
 from model_zoo.LEAM import LEAMModel
+from model_zoo.CNN import CNNModel
 
 
 class Config(object):
@@ -29,7 +30,7 @@ class Config(object):
         self.class_file = os.path.join(self.base_file, r'data\class.txt')
         self.cla_nums = len([x.strip() for x in open(self.class_file, encoding='utf8').readlines()])  # 分类标签数目
 
-        self.model = LEAMModel  # 模型[BiGRUModel,DPCNNModel,AttRNNModel,TextCNNModel,HANModel,LEAMModel]
+        self.model = AttRNNModel  # 模型
         self.word_char = 'word'  # word or char
 
         self.checkpoint_dir = os.path.join(self.base_file, 'save_model')  # 需要修改文件名
@@ -39,7 +40,7 @@ class Config(object):
         self.char_vocab_path = os.path.join(self.base_file, r'data\save_vocab\char_tok.pickle')  # 词表文件
         self.w2v_path = os.path.join(self.base_file, r'vectors\w2v.model')  # word2vec词向量文件
         self.glove_path = os.path.join(self.base_file, r'vectors\glove_300d.txt')  # glove词向量文件
-        self.embedding_type = 'word2vec'  # word2vec glove w2v_glove
+        self.embedding_type = 'word2vec'  # word2vec glove word2vec_glove
         self.train_path = os.path.join(self.base_file, r'data\mutil_train_sample.txt')  # 训练集文件
         self.valid_path = os.path.join(self.base_file, r'data\mutil_valid_sample.txt')  # 验证集文件
         self.test_path = os.path.join(self.base_file, r'data\mutil_test_sample.txt')  # 测试集文件

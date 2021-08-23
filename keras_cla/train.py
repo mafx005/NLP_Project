@@ -19,7 +19,6 @@ from Config.config import Config
 from callbacks.My_Callback import Mylosscallback
 from utils.util import load_data, load_vocab, predict2both, predict2tag
 
-
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 config = Config()
 
@@ -59,51 +58,52 @@ else:
 
 if config.word_char == 'word':
     word_vocab = token.word_index
-    if not os.path.exists(config.w2v_path):
-        print("++++++++++train word2vec model finished++++++++++")
-        model = Word2Vec([[word for word in document.split(' ')] for document in total_text],
-                         size=300,
-                         window=5,
-                         iter=10,
-                         seed=2020,
-                         min_count=2)
-        model.save(config.w2v_path)
-        w2v_model = Word2Vec.load(config.w2v_path)
-        print("++++++++++train word2vec model finished++++++++++")
-    else:
-        w2v_model = Word2Vec.load(config.w2v_path)
-        # glove_model = gensim.models.KeyedVectors.load_word2vec_format(config.glove_path)
-        print("++++++++++load word2vec glove finished++++++++++")
-
-    w2v_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
-    for word, i in word_vocab.items():
-        embedding_vector = w2v_model.wv[word] if word in w2v_model else None
-        if embedding_vector is not None:
-            w2v_embedding_matrix[i] = embedding_vector
+    if 'word2vec' in config.embedding_type:
+        if not os.path.exists(config.w2v_path):
+            print("++++++++++train word2vec model finished++++++++++")
+            model = Word2Vec([[word for word in document.split(' ')] for document in total_text],
+                             size=300,
+                             window=5,
+                             iter=10,
+                             seed=2020,
+                             min_count=2)
+            model.save(config.w2v_path)
+            w2v_model = Word2Vec.load(config.w2v_path)
+            print("++++++++++train word2vec model finished++++++++++")
         else:
-            unk_vec = np.random.random(300) * 0.5
-            unk_vec = unk_vec - unk_vec.mean()
-            w2v_embedding_matrix[i] = unk_vec
-    # glove_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
-    # for word, i in word_vocab.items():
-    #     embedding_vector = glove_model.wv[word] if word in glove_model else None
-    #     if embedding_vector is not None:
-    #         glove_embedding_matrix[i] = embedding_vector
-    #     else:
-    #         unk_vec = np.random.random(300) * 0.5
-    #         unk_vec = unk_vec - unk_vec.mean()
-    #         glove_embedding_matrix[i] = unk_vec
-    if config.embedding_type == 'glove' and os.path.exists(config.glove_path):
-        # embedding_matrix = glove_embedding_matrix
-        embedding_matrix = w2v_embedding_matrix
-        print('glove embedding load finish')
-    elif config.embedding_type == 'w2v_glove':
-        # embedding_matrix = np.concatenate((w2v_embedding_matrix, glove_embedding_matrix),axis=1)
-        embedding_matrix = w2v_embedding_matrix
-        print('w2v & glove embedding load finish')
-    else:
+            w2v_model = Word2Vec.load(config.w2v_path)
+            print("++++++++++load word2vec finished++++++++++")
+        w2v_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
+        for word, i in word_vocab.items():
+            embedding_vector = w2v_model.wv[word] if word in w2v_model else None
+            if embedding_vector is not None:
+                w2v_embedding_matrix[i] = embedding_vector
+            else:
+                unk_vec = np.random.random(300) * 0.5
+                unk_vec = unk_vec - unk_vec.mean()
+                w2v_embedding_matrix[i] = unk_vec
         embedding_matrix = w2v_embedding_matrix
         print('word2vec embedding load finish')
+    if 'glove' in config.embedding_type:
+        if not os.path.exists(config.w2v_path):
+            raise Exception('please train glove model')
+        else:
+            glove_model = gensim.models.KeyedVectors.load_word2vec_format(config.glove_path)
+        glove_embedding_matrix = np.zeros((len(word_vocab) + 1, 300))
+        for word, i in word_vocab.items():
+            embedding_vector = glove_model.wv[word] if word in glove_model else None
+            if embedding_vector is not None:
+                glove_embedding_matrix[i] = embedding_vector
+            else:
+                unk_vec = np.random.random(300) * 0.5
+                unk_vec = unk_vec - unk_vec.mean()
+                glove_embedding_matrix[i] = unk_vec
+        embedding_matrix = glove_embedding_matrix
+        print('glove embedding load finish')
+
+    if config.embedding_type == 'word2vec_glove':
+        embedding_matrix = np.concatenate((w2v_embedding_matrix, glove_embedding_matrix), axis=1)
+        print('w2v & glove embedding load finish')
     model = config.model(config.word_maxlen, embedding_matrix, config.word_char)
 else:
     model = config.model(config.char_maxlen, None, config.word_char)
@@ -185,6 +185,10 @@ if config.do_predict:
         test_precision = ''
         f1_macro = f1_macro
         f1_micro = f1_micro
+        print('ACC:{}'.format(test_acc))
+        print('F1_Avg:{}'.format(test_f1))
+        print('f1_macro:{}'.format(f1_macro))
+        print('f1_micro:{}'.format(f1_micro))
     else:
         raise Exception('Assert cla_type in Multiclass or Binary_class or Mutillabel')
     # 写入最终结果
@@ -216,5 +220,6 @@ if config.do_predict:
             for i in range(len(pred_labels_list)):
                 if pred_labels_list[i][0] != true_labels_list[i]:
                     # print(i)
-                    csv_writer.writerow([test_lines[i].split('\t')[1], test_lines[i].split('\t')[0], pred_labels_list[i][0], test_pred.tolist()[i][0]])
+                    csv_writer.writerow(
+                        [test_lines[i].split('\t')[1], test_lines[i].split('\t')[0], pred_labels_list[i][0], test_pred.tolist()[i][0]])
         bad_case_file.close()

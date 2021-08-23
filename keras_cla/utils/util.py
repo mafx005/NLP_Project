@@ -83,10 +83,7 @@ def merge_fact_paragraphs(text_list):
 
 def load_data(file_path, class_file, cla_type, cla_nums, word_char='word'):
     label_set = creat_label_set(class_file)
-    if word_char == 'word':
-        file_name = open(file_path, 'r', encoding='utf8')
-    else:
-        file_name = open(file_path, 'r', encoding='utf8')
+    file_name = open(file_path, 'r', encoding='utf8')
     text = []
     label = []
     for t in file_name:

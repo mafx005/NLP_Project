@@ -17,12 +17,17 @@ def TextCNNModel(sent_length, embeddings_weight, word_char):
     from Config.config import Config
     config = Config()
     if word_char == 'word':
-        embedding = Embedding(
-            name="word_embedding",
-            input_dim=embeddings_weight.shape[0],
-            weights=[embeddings_weight],
-            output_dim=embeddings_weight.shape[1],
-            trainable=True)
+        if config.embedding_type == 'random':
+            embedding = Embedding(name='char_embedding', input_dim=config.word_num_words, output_dim=config.embed_size, trainable=True)
+        elif config.embedding_type in ['word2vec', 'glove', 'word2vec_glove']:
+            embedding = Embedding(
+                name="word_embedding",
+                input_dim=embeddings_weight.shape[0],
+                weights=[embeddings_weight],
+                output_dim=embeddings_weight.shape[1],
+                trainable=True)
+        else:
+            raise Exception('选择一种词向量random,word2vec,glove,word2vec_glove')
     else:
         print('执行基于字的训练模型')
         embedding = Embedding(name='char_embedding', input_dim=config.char_num_words, output_dim=config.embed_size, trainable=True)
