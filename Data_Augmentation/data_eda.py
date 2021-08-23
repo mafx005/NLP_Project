@@ -124,7 +124,7 @@ def nlp_eda(sentence, alpha_sr=0.1, alpha_ri=0.1, alpha_rs=0.1, p_rd=0.1, num_au
     # 随机插入ri
     for _ in range(num_new_per_technique):
         a_words = random_insertion(words, n_ri)
-        augmented_sentences.append(' '.join(a_words))
+        augmented_sentences.append(''.join(a_words))
 
     # 随机交换rs
     for _ in range(num_new_per_technique):
@@ -184,7 +184,7 @@ def gen_eda(train_orig, output_file, alpha, num_aug=9, flag=False):
 if __name__ == '__main__':
     num_aug = 3  # 语句增强倍数，需要生成几倍的数据
     alpha = 0.2  # 语句中被替换、删除、插入的单词数占比
-    flag = False    # 数据是否存在label，如果存在按照label \t sentence格式保存
-    input_filename = r'D:\CODE\cail_2021\data\test_0812_labels_clean.txt'  # 输入要增强的文件
-    output_filename = r'D:\CODE\cail_2021\data\test_0812_labels_clean_augment.txt'  # 输出增强后的文件
+    flag = True    # 数据是否存在label，如果存在,按照label \t sentence格式保存,并将flag修改为True
+    input_filename = r'input.txt'  # 输入要增强的文件
+    output_filename = r'output.txt'  # 输出增强后的文件
     gen_eda(input_filename, output_filename, alpha=alpha, num_aug=num_aug, flag=flag)
