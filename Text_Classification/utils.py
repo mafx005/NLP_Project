@@ -35,8 +35,8 @@ def build_vocab(file_path, tokenizer, max_size, min_freq):
     return vocab_dic
 
 
-def build_dataset(config, ues_word, cla_task_name='binary_cla'):
-    if ues_word:
+def build_dataset(config, use_word, cla_task_name='binary_cla'):
+    if use_word:
         tokenizer = lambda x: list(jieba.cut(x))  # 以空格隔开，word-level
     else:
         tokenizer = lambda x: [y for y in x]  # char-level

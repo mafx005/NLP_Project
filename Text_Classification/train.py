@@ -181,21 +181,21 @@ if __name__ == '__main__':
     dataset = 'data'  # 存放数据集的目录
     cla_task_name = 'mutil_label'  # binary_cla(二分类),mutil_class(多分类),mutil_label(多标签分类)
 
-    model_name = 'TextCNN'
+    model_name = 'TextCNN'  # 模型选择
     embedding = 'random'
     model = import_module('model_zoo.' + model_name)
-    config = import_module('config.' + model_name + '_config').Config(dataset, embedding)
+    config = import_module('config.' + model_name + '_config').Config(dataset, embedding, model_name)
 
     start_time = time.time()
     print("Loading data...")
-    vocab, train_data, dev_data, test_data = build_dataset(config, ues_word=True, cla_task_name=cla_task_name)
+    vocab, train_data, dev_data, test_data = build_dataset(config, use_word=True, cla_task_name=cla_task_name)
     train_iter = build_iterator(train_data, config)
     dev_iter = build_iterator(dev_data, config)
     test_iter = build_iterator(test_data, config)
     time_dif = get_time_dif(start_time)
     print("Time usage:", time_dif)
 
-    config.n_vocab = len(vocab)  # 修改config中的n_vocab值
+    config.n_vocab = len(vocab)
     model = model.Model(config).to(config.device)
     init_network(model)
     # train test eval

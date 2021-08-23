@@ -9,8 +9,8 @@ import numpy as np
 
 
 class BaseConfig(object):
-    def __init__(self, dataset, embedding):
-        self.model_name = 'TextCNN'
+    def __init__(self, dataset, embedding, model_name):
+        self.model_name = model_name
         self.train_path = dataset + '/train.txt'  # 训练集
         self.dev_path = dataset + '/valid.txt'  # 验证集
         self.test_path = dataset + '/test.txt'  # 测试集
