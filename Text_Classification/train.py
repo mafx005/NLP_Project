@@ -11,9 +11,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from importlib import import_module
 from tensorboardX import SummaryWriter
-from Text_Classification.utils import build_dataset, build_iterator, get_time_dif
-from Text_Classification.utils import acc_score, classification_report, confusion_matrix, mutil_label_acc_score
-from Text_Classification.utils import mutil_label_f1_score, predict2both
+from utils import build_dataset, build_iterator, get_time_dif
+from utils import acc_score, classification_report, confusion_matrix, mutil_label_acc_score
+from utils import mutil_label_f1_score, predict2both
 
 
 # 权重初始化，默认xavier
@@ -162,12 +162,9 @@ def evaluate_mutil_label_task(model, data_iter, test=False):
             loss = nn.BCEWithLogitsLoss()(outputs, labels.float())
             loss_total += loss
             labels = labels.data.cpu().numpy()
-            # predic = predict2both(outputs.data)
-            # labels_all = np.append(labels_all, labels, axis=0)
-            # predict_all = np.append(predict_all, outputs.data, axis=0)
             labels_all.extend(labels)
             predict_all.extend(outputs.data)
-
+    predict_all = torch.stack(predict_all)
     acc = mutil_label_acc_score(labels_all, predict_all)
     if test:
         f1_micro, f1_macro = mutil_label_f1_score(labels_all, predict_all)
@@ -181,7 +178,7 @@ if __name__ == '__main__':
     dataset = 'data'  # 存放数据集的目录
     cla_task_name = 'mutil_label'  # binary_cla(二分类),mutil_class(多分类),mutil_label(多标签分类)
 
-    model_name = 'TextCNN'  # 模型选择
+    model_name = 'TextRNN_Att'  # 模型选择 TextCNN
     embedding = 'random'
     model = import_module('model_zoo.' + model_name)
     config = import_module('config.' + model_name + '_config').Config(dataset, embedding, model_name)
