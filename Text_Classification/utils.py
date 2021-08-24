@@ -45,7 +45,7 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
     else:
         vocab = build_vocab(config.train_path, tokenizer=tokenizer, max_size=MAX_VOCAB_SIZE, min_freq=1)
         pickle.dump(vocab, open(config.vocab_path, 'wb'))
-    print(f"Vocab size: {len(vocab)}")
+    print("Vocab size:", len(vocab))
 
     def load_dataset(path, pad_size=32):
         contents = []
@@ -143,6 +143,8 @@ def acc_score(true_labels, pred_labels):
 
 def predict2both(predictions):
     one_hots = []
+    predictions = torch.nn.Sigmoid()(predictions)
+    predictions = predictions.cpu()
     for prediction in predictions:
         one_hot = np.where(prediction > 0.5, 1.0, 0.0)
         if one_hot.sum() == 0:
