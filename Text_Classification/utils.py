@@ -53,9 +53,9 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
         couont = 0
         with open(path, 'r', encoding='UTF-8') as f:
             for line in tqdm(f):
-                couont += 1
-                if couont == 10:
-                    break
+                # couont += 1
+                # if couont == 10:
+                #     break
                 lin = line.strip()
                 if not lin:
                     continue
