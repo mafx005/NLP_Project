@@ -124,7 +124,7 @@ def test(config, model, test_iter, model_name):
         print("Mutil label f1_micro_score...")
         print(f1_micro)
     else:
-        test_acc, test_loss, test_report, test_confusion = evaluate(config, model, test_iter, test=True)
+        test_acc, test_loss, test_report, test_confusion = evaluate(config, model, test_iter, model_name, test=True)
         msg = 'Test Loss: {0:>5.2},  Test Acc: {1:>6.2%}'
         print(msg.format(test_loss, test_acc))
         print("Precision, Recall and F1-Score...")
@@ -142,7 +142,7 @@ def evaluate(config, model, data_iter, model_name, test=False):
     labels_all = np.array([], dtype=int)
     with torch.no_grad():
         for texts, labels in data_iter:
-            if 'bert' in model_name.lower():
+            if 'bert' not in model_name.lower():
                 outputs = model(texts)
             else:
                 inputs = tokenizer(texts, max_length=config.pad_size, padding=True, truncation=True, return_tensors='pt')
@@ -199,25 +199,26 @@ if __name__ == '__main__':
     set_seed(42)
 
     dataset = 'data'  # 存放数据集的目录
-    cla_task_name = 'mutil_label'  # binary_cla(二分类),mutil_class(多分类),mutil_label(多标签分类)
+    cla_task_name = 'binary_cla'  # binary_cla(二分类),mutil_class(多分类),mutil_label(多标签分类)
 
-    model_name = 'bert'  # 模型选择
+    model_name = 'TextCNN'  # 模型选择
     embedding = 'random'
     model = import_module('model_zoo.' + model_name)
     config = import_module('config.' + model_name + '_config').Config(dataset, embedding, model_name)
 
-    model = model.Model(config).to(config.device)
     if 'bert' not in model_name.lower():
-        init_network(model)
         print("Loading data...")
         vocab, train_data, dev_data, test_data = build_dataset(config, use_word=True, cla_task_name=cla_task_name)
         train_iter = build_iterator(train_data, config)
         dev_iter = build_iterator(dev_data, config)
         test_iter = build_iterator(test_data, config)
         config.n_vocab = len(vocab)
+        model = model.Model(config).to(config.device)
+        init_network(model)
         train(config, model, train_iter, dev_iter, test_iter, model_name)
     else:
         print("Loading data for bert...")
+        model = model.Model(config).to(config.device)
         tokenizer = BertTokenizer.from_pretrained(config.bert_path)  # 设置预训练模型的路径
         train_data = BertData(config, config.train_path, cla_task_name=cla_task_name)
         valid_data = BertData(config, config.valid_path, cla_task_name=cla_task_name)

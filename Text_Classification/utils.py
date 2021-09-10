@@ -50,11 +50,11 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
 
     def load_dataset(path, pad_size=32):
         contents = []
-        couont = 0
+        # count = 0
         with open(path, 'r', encoding='UTF-8') as f:
             for line in tqdm(f):
-                # couont += 1
-                # if couont == 10:
+                # count += 1
+                # if count == 10:
                 #     break
                 lin = line.strip()
                 if not lin:
@@ -77,7 +77,7 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
                 for word in token:
                     words_line.append(vocab.get(word, vocab.get(UNK)))
                 contents.append((words_line, label, seq_len))
-        return contents  # [([...], 0), ([...], 1), ...]
+        return contents
     train = load_dataset(config.train_path, config.pad_size)
     dev = load_dataset(config.valid_path, config.pad_size)
     test = load_dataset(config.test_path, config.pad_size)
