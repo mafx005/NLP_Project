@@ -8,6 +8,11 @@ import synonyms
 import random
 from random import shuffle
 
+
+"""
+paper title:    Easy Data Augmentation Techniques for Boosting Performance on TextClassification Tasks
+"""
+
 random.seed(42)
 # 加载自定义词典，根据任务需要自己修改
 jieba.load_userdict('dict/dict.txt')
@@ -185,6 +190,6 @@ if __name__ == '__main__':
     num_aug = 3  # 语句增强倍数，需要生成几倍的数据
     alpha = 0.2  # 语句中被替换、删除、插入的单词数占比
     flag = True    # 数据是否存在label，如果存在,按照label \t sentence格式保存,并将flag修改为True
-    input_filename = r'input.txt'  # 输入要增强的文件
-    output_filename = r'output.txt'  # 输出增强后的文件
+    input_filename = r'D:\CODE\cail_2021\data\train_0812_labels_clean.txt'  # 输入要增强的文件
+    output_filename = r'D:\CODE\cail_2021\data\train_0812_labels_clean_augment.txt'  # 输出增强后的文件
     gen_eda(input_filename, output_filename, alpha=alpha, num_aug=num_aug, flag=flag)
