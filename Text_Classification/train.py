@@ -9,15 +9,18 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from importlib import import_module
 from tensorboardX import SummaryWriter
-from utils import build_dataset, build_iterator, get_time_dif
+from transformers import BertTokenizer
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from utils import build_dataset, build_iterator, get_time_dif, BertData
 from utils import acc_score, classification_report, confusion_matrix, mutil_label_acc_score
-from utils import mutil_label_f1_score, predict2both
+from utils import mutil_label_f1_score
 
 
 # 权重初始化，默认xavier
-def init_network(model, method='xavier', exclude='embedding', seed=123):
+def init_network(model, method='xavier', exclude='embedding', seed=42):
     for name, w in model.named_parameters():
         if exclude not in name:
             if 'weight' in name:
@@ -40,13 +43,11 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True  # 保证每次结果一样
 
 
-def train(config, model, train_iter, dev_iter, test_iter):
+def train(config, model, train_iter, dev_iter, test_iter, model_name):
     start_time = time.time()
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-
-    # 学习率指数衰减，每次epoch：学习率 = gamma * 学习率
-    # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+    scheduler = CosineAnnealingLR(optimizer, T_max=20, eta_min=0, last_epoch=-1)
     total_batch = 0  # 记录进行到多少batch
     dev_best_loss = float('inf')
     last_improve = 0  # 记录上次验证集loss下降的batch数
@@ -54,9 +55,17 @@ def train(config, model, train_iter, dev_iter, test_iter):
     writer = SummaryWriter(log_dir=config.log_path + '/' + time.strftime('%m-%d_%H.%M', time.localtime()))
     for epoch in range(config.num_epochs):
         print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-        # scheduler.step() # 学习率衰减
+        scheduler.step()  # 学习率衰减
         for i, (trains, labels) in enumerate(train_iter):
-            outputs = model(trains)
+            if 'bert' not in model_name.lower():
+                outputs = model(trains)
+            else:
+                inputs = tokenizer(trains, max_length=config.pad_size, padding=True, truncation=True, return_tensors='pt')
+                input_ids = inputs['input_ids'].to(config.device)
+                token_type_ids = inputs['token_type_ids'].to(config.device)
+                attention_mask = inputs['attention_mask'].to(config.device)
+                label = labels.to(config.device)
+                outputs = model(input_ids, attention_mask, token_type_ids, label)
             model.zero_grad()
             if cla_task_name == 'mutil_label':
                 loss = nn.BCEWithLogitsLoss()(outputs, labels.float())
@@ -69,11 +78,11 @@ def train(config, model, train_iter, dev_iter, test_iter):
                 true = labels.data.cpu()
                 if cla_task_name == 'mutil_label':
                     train_acc = mutil_label_acc_score(true, outputs.data)
-                    dev_acc, dev_loss = evaluate_mutil_label_task(model, dev_iter)
+                    dev_acc, dev_loss = evaluate_mutil_label_task(model, dev_iter, model_name)
                 else:
                     predic = torch.max(outputs.data, 1)[1].cpu()
                     train_acc = acc_score(true, predic)
-                    dev_acc, dev_loss = evaluate(config, model, dev_iter)
+                    dev_acc, dev_loss = evaluate(config, model, dev_iter, model_name)
                 if dev_loss < dev_best_loss:
                     dev_best_loss = dev_loss
                     torch.save(model.state_dict(), config.save_path)
@@ -98,16 +107,16 @@ def train(config, model, train_iter, dev_iter, test_iter):
         if flag:
             break
     writer.close()
-    test(config, model, test_iter)
+    test(config, model, test_iter, model_name)
 
 
-def test(config, model, test_iter):
+def test(config, model, test_iter, model_name):
     # test
     model.load_state_dict(torch.load(config.save_path))
     model.eval()
     start_time = time.time()
     if cla_task_name == 'mutil_label':
-        test_acc, test_loss, f1_micro, f1_macro = evaluate_mutil_label_task(model, test_iter, test=True)
+        test_acc, test_loss, f1_micro, f1_macro = evaluate_mutil_label_task(model, test_iter, model_name, test=True)
         msg = 'Test Loss: {0:>5.2},  Test Acc: {1:>6.2%}'
         print(msg.format(test_loss, test_acc))
         print("Mutil label f1_macro_score...")
@@ -126,14 +135,22 @@ def test(config, model, test_iter):
     print("Time usage:", time_dif)
 
 
-def evaluate(config, model, data_iter, test=False):
+def evaluate(config, model, data_iter, model_name, test=False):
     model.eval()
     loss_total = 0
     predict_all = np.array([], dtype=int)
     labels_all = np.array([], dtype=int)
     with torch.no_grad():
         for texts, labels in data_iter:
-            outputs = model(texts)
+            if 'bert' in model_name.lower():
+                outputs = model(texts)
+            else:
+                inputs = tokenizer(texts, max_length=config.pad_size, padding=True, truncation=True, return_tensors='pt')
+                input_ids = inputs['input_ids'].to(config.device)
+                token_type_ids = inputs['token_type_ids'].to(config.device)
+                attention_mask = inputs['attention_mask'].to(config.device)
+                label = labels.to(config.device)
+                outputs = model(input_ids, attention_mask, token_type_ids, label)
             loss = F.cross_entropy(outputs, labels)
             loss_total += loss
             labels = labels.data.cpu().numpy()
@@ -149,16 +166,22 @@ def evaluate(config, model, data_iter, test=False):
     return acc, loss_total / len(data_iter)
 
 
-def evaluate_mutil_label_task(model, data_iter, test=False):
+def evaluate_mutil_label_task(model, data_iter, model_name, test=False):
     model.eval()
     loss_total = 0
-    # predict_all = np.array([], dtype=int)
-    # labels_all = np.array([], dtype=int)
     predict_all = []
     labels_all = []
     with torch.no_grad():
         for texts, labels in data_iter:
-            outputs = model(texts)
+            if 'bert' not in model_name.lower():
+                outputs = model(texts)
+            else:
+                inputs = tokenizer(texts, max_length=config.pad_size, padding=True, truncation=True, return_tensors='pt')
+                input_ids = inputs['input_ids'].to(config.device)
+                token_type_ids = inputs['token_type_ids'].to(config.device)
+                attention_mask = inputs['attention_mask'].to(config.device)
+                label = labels.to(config.device)
+                outputs = model(input_ids, attention_mask, token_type_ids, label)
             loss = nn.BCEWithLogitsLoss()(outputs, labels.float())
             loss_total += loss
             labels = labels.data.cpu().numpy()
@@ -178,22 +201,28 @@ if __name__ == '__main__':
     dataset = 'data'  # 存放数据集的目录
     cla_task_name = 'mutil_label'  # binary_cla(二分类),mutil_class(多分类),mutil_label(多标签分类)
 
-    model_name = 'TextRNN_Att'  # 模型选择 TextCNN
+    model_name = 'bert'  # 模型选择
     embedding = 'random'
     model = import_module('model_zoo.' + model_name)
     config = import_module('config.' + model_name + '_config').Config(dataset, embedding, model_name)
 
-    start_time = time.time()
-    print("Loading data...")
-    vocab, train_data, dev_data, test_data = build_dataset(config, use_word=True, cla_task_name=cla_task_name)
-    train_iter = build_iterator(train_data, config)
-    dev_iter = build_iterator(dev_data, config)
-    test_iter = build_iterator(test_data, config)
-    time_dif = get_time_dif(start_time)
-    print("Time usage:", time_dif)
-
-    config.n_vocab = len(vocab)
     model = model.Model(config).to(config.device)
-    init_network(model)
-    # train test eval
-    train(config, model, train_iter, dev_iter, test_iter)
+    if 'bert' not in model_name.lower():
+        init_network(model)
+        print("Loading data...")
+        vocab, train_data, dev_data, test_data = build_dataset(config, use_word=True, cla_task_name=cla_task_name)
+        train_iter = build_iterator(train_data, config)
+        dev_iter = build_iterator(dev_data, config)
+        test_iter = build_iterator(test_data, config)
+        config.n_vocab = len(vocab)
+        train(config, model, train_iter, dev_iter, test_iter, model_name)
+    else:
+        print("Loading data for bert...")
+        tokenizer = BertTokenizer.from_pretrained(config.bert_path)  # 设置预训练模型的路径
+        train_data = BertData(config, config.train_path, cla_task_name=cla_task_name)
+        valid_data = BertData(config, config.valid_path, cla_task_name=cla_task_name)
+        test_data = BertData(config, config.test_path, cla_task_name=cla_task_name)
+        train_dataloader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True)
+        valid_dataloader = DataLoader(valid_data, batch_size=config.batch_size, shuffle=True)
+        test_dataloader = DataLoader(test_data, batch_size=config.batch_size, shuffle=True)
+        train(config, model, train_dataloader, valid_dataloader, test_dataloader, model_name)

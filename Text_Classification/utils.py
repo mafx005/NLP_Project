@@ -12,6 +12,7 @@ import jieba
 import numpy as np
 from tqdm import tqdm
 from datetime import timedelta
+from torch.utils.data import Dataset
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 
 MAX_VOCAB_SIZE = 100000
@@ -49,8 +50,12 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
 
     def load_dataset(path, pad_size=32):
         contents = []
+        couont = 0
         with open(path, 'r', encoding='UTF-8') as f:
             for line in tqdm(f):
+                couont += 1
+                if couont == 10:
+                    break
                 lin = line.strip()
                 if not lin:
                     continue
@@ -74,7 +79,7 @@ def build_dataset(config, use_word, cla_task_name='binary_cla'):
                 contents.append((words_line, label, seq_len))
         return contents  # [([...], 0), ([...], 1), ...]
     train = load_dataset(config.train_path, config.pad_size)
-    dev = load_dataset(config.dev_path, config.pad_size)
+    dev = load_dataset(config.valid_path, config.pad_size)
     test = load_dataset(config.test_path, config.pad_size)
     return vocab, train, dev, test
 
@@ -131,6 +136,35 @@ def build_iterator(dataset, config):
     return iter
 
 
+class BertData(Dataset):
+    def __init__(self, config, file_name, cla_task_name='binary_cla'):
+        self.data = self.build_bert_dataset(config, file_name, cla_task_name)
+
+    @staticmethod
+    def build_bert_dataset(config, file_name, cla_task_name):
+        datas = []
+        with open(file_name, 'r', encoding='utf8')as f:
+            for line in tqdm(f):
+                lin = line.strip()
+                if not lin:
+                    continue
+                label, content = lin.split('\t')
+                if cla_task_name == 'mutil_label':
+                    label = mutil_label2onehot(label, config.class_list)
+                else:
+                    label = int(label)
+                datas.append((content, label))
+        return datas
+
+    def __getitem__(self, idx):
+        text = self.data[idx][0]
+        label = self.data[idx][1]
+        return text, label
+
+    def __len__(self):
+        return len(self.data)
+
+
 def get_time_dif(start_time):
     end_time = time.time()
     time_dif = end_time - start_time
@@ -176,6 +210,36 @@ def mutil_label2onehot(label, labels_list):
         index = labels_list.index(j)
         onehot_labels[index] = 1
     return onehot_labels
+
+
+class FGM():
+    """
+    对抗训练，对embedding添加扰动
+    """
+
+    def __init__(self, model):
+        self.model = model
+        self.backup = {}
+
+    def attack(self, epsilon=1., emb_name='emb.'):
+        # emb_name这个参数要换成你模型中embedding的参数名
+        # print(emb_name)
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and emb_name in name:
+                self.backup[name] = param.data.clone()
+                norm = torch.norm(param.grad)
+                if norm != 0 and not torch.isnan(norm):
+                    r_at = epsilon * param.grad / norm
+                    param.data.add_(r_at)
+
+    def restore(self, emb_name='emb.'):
+        # emb_name这个参数要换成你模型中embedding的参数名
+        # print(emb_name)
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and emb_name in name:
+                assert name in self.backup
+                param.data = self.backup[name]
+        self.backup = {}
 
 
 if __name__ == '__main__':
